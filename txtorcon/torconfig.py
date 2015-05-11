@@ -917,6 +917,31 @@ class EphemeralHiddenService(object):
         yield uploaded
         yield protocol.remove_event_listener('HS_DESC', hs_desc)
 
+        log.msg('Created hidden-service at', self.hostname)
+
+        # Now we want to wait for the descriptor uploads. This doesn't
+        # quite work, as the UPLOADED events always say "UNKNOWN" for
+        # the HSAddress so we can't correlate it to *this* onion for
+        # sure :/ "yet", though. Yawning says on IRC this is coming.
+
+        uploaded = defer.Deferred()
+
+        def hs_desc(evt):
+            if uploaded.called:
+                return
+            args = evt.split()
+            subtype = args[0]
+            if subtype == 'UPLOADED':
+                addr = args[1]
+                # will be "UNKNOWN" now, always
+                # callback with the target HSDi
+                uploaded.callback(args[3])
+
+        yield protocol.add_event_listener('HS_DESC', hs_desc)
+        yield uploaded
+        yield protocol.remove_event_listener('HS_DESC', hs_desc)
+        log.msg('At least one descriptor uploaded.')
+
     @defer.inlineCallbacks
     def remove_from_tor(self, protocol):
         '''
