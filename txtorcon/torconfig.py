@@ -924,28 +924,57 @@ class EphemeralHiddenService(object):
         # the HSAddress so we can't correlate it to *this* onion for
         # sure :/ "yet", though. Yawning says on IRC this is coming.
 
+        # XXX Hmm, still UPLOADED always says UNKNOWN, but the UPLOAD
+        # events do say the address -- so we save all those, and
+        # correlate to the target nodes. Not sure if this will really
+        # even work, but better than nothing.
+
         uploaded = defer.Deferred()
+        attempted_uploads = set()
+        confirmed_uploads = set()
+        failed_uploads = set()
 
         def hs_desc(evt):
+            """
+            From control-spec:
+            "650" SP "HS_DESC" SP Action SP HSAddress SP AuthType SP HsDir
+            [SP DescriptorID] [SP "REASON=" Reason] [SP "REPLICA=" Replica]
+            """
+            print "XXX", evt
             if uploaded.called:
                 return
             args = evt.split()
             subtype = args[0]
-            if subtype == 'UPLOADED':
-                # will be "UNKNOWN" now, always
+            if subtype == 'UPLOAD':
+                if args[1] == self.hostname[:-6]:
+                    attempted_uploads.add(args[3])
+
+            elif subtype == 'UPLOADED':
                 addr = args[1]
-                do_callback = True
                 if addr != 'UNKNOWN':
-                    do_callback = (addr == self.hostname[:-6])
+                    if addr == self.hostname[:-6]:
+                        uploaded.callback(args[3])
+                if args[3] in attempted_uploads:
+                    confirmed_uploads.add(args[3])
+                    log.msg("Uploaded '{}' to '{}'".format(self.hostname, args[3]))
+                    if True or attempted_uploads == confirmed_uploads:
+                        uploaded.callback(confirmed_uploads)
 
-                if do_callback:
-                    # callback with the target HSDir
-                    uploaded.callback(args[3])
+            elif subtype == 'FAILED':
+                if args[1] == self.hostname[:-6]:
+                    failed_uploads.append(args[3])
+                    if failed_uploads == attempted_uploads:
+                        msg = "Failed to upload '{}' to: {}".format(
+                            self.hostname,
+                            ', '.join(failed_uploads),
+                        )
+                        uploaded.errback(RuntimeError(msg))
 
+        log.msg("Created '{}', waiting for descriptor uploads.".format(self.hostname))
+        print "ding", self.hostname
         yield protocol.add_event_listener('HS_DESC', hs_desc)
         yield uploaded
-        yield protocol.remove_event_listener('HS_DESC', hs_desc)
-        log.msg('At least one descriptor uploaded.')
+        #yield protocol.remove_event_listener('HS_DESC', hs_desc)
 
     @defer.inlineCallbacks
     def remove_from_tor(self, protocol):
