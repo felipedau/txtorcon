@@ -940,9 +940,7 @@ class EphemeralHiddenService(object):
             "650" SP "HS_DESC" SP Action SP HSAddress SP AuthType SP HsDir
             [SP DescriptorID] [SP "REASON=" Reason] [SP "REPLICA=" Replica]
             """
-            print "XXX", evt
-            if uploaded.called:
-                return
+
             args = evt.split()
             subtype = args[0]
             if subtype == 'UPLOAD':
@@ -950,19 +948,17 @@ class EphemeralHiddenService(object):
                     attempted_uploads.add(args[3])
 
             elif subtype == 'UPLOADED':
+                # we only need ONE successful upload to happen for the
+                # HS to be reachable.
                 addr = args[1]
-                if addr != 'UNKNOWN':
-                    if addr == self.hostname[:-6]:
-                        uploaded.callback(args[3])
                 if args[3] in attempted_uploads:
                     confirmed_uploads.add(args[3])
                     log.msg("Uploaded '{}' to '{}'".format(self.hostname, args[3]))
-                    if True or attempted_uploads == confirmed_uploads:
-                        uploaded.callback(confirmed_uploads)
+                    uploaded.callback(self)
 
             elif subtype == 'FAILED':
                 if args[1] == self.hostname[:-6]:
-                    failed_uploads.append(args[3])
+                    failed_uploads.add(args[3])
                     if failed_uploads == attempted_uploads:
                         msg = "Failed to upload '{}' to: {}".format(
                             self.hostname,
@@ -971,10 +967,9 @@ class EphemeralHiddenService(object):
                         uploaded.errback(RuntimeError(msg))
 
         log.msg("Created '{}', waiting for descriptor uploads.".format(self.hostname))
-        print "ding", self.hostname
         yield protocol.add_event_listener('HS_DESC', hs_desc)
         yield uploaded
-        #yield protocol.remove_event_listener('HS_DESC', hs_desc)
+        yield protocol.remove_event_listener('HS_DESC', hs_desc)
 
     @defer.inlineCallbacks
     def remove_from_tor(self, protocol):
