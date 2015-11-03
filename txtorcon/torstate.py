@@ -260,6 +260,15 @@ class TorState(object):
         #: see set_attacher
         self.cleanup = None
 
+        #: event-name -> listener method
+        self.event_map = {
+            'STREAM': self._stream_update,
+            'CIRC': self._circuit_update,
+            'NS': self._update_network_status,
+            'NEWCONSENSUS': self._update_network_status,
+            'ADDRMAP': self._addr_map,
+        }
+
         class die(object):
             __name__ = 'die'  # FIXME? just to ease spagetti.py:82's pain
 
@@ -477,22 +486,23 @@ class TorState(object):
                                                        self.undo_attacher)
         return d
 
-    # noqa
-    stream_close_reasons = {
-        'REASON_MISC': 1,               # (catch-all for unlisted reasons)
-        'REASON_RESOLVEFAILED': 2,      # (couldn't look up hostname)
-        'REASON_CONNECTREFUSED': 3,     # (remote host refused connection) [*]
-        'REASON_EXITPOLICY': 4,         # (OR refuses to connect to host or port)
-        'REASON_DESTROY': 5,            # (Circuit is being destroyed)
-        'REASON_DONE': 6,               # (Anonymized TCP connection was closed)
-        'REASON_TIMEOUT': 7,            # (Connection timed out, or OR timed out while connecting)
-        'REASON_NOROUTE': 8,            # (Routing error while attempting to contact destination)
-        'REASON_HIBERNATING': 9,        # (OR is temporarily hibernating)
-        'REASON_INTERNAL': 10,          # (Internal error at the OR)
-        'REASON_RESOURCELIMIT': 11,     # (OR has no resources to fulfill request)
-        'REASON_CONNRESET': 12,         # (Connection was unexpectedly reset)
-        'REASON_TORPROTOCOL': 13,       # (Sent when closing connection because of Tor protocol violations.)
-        'REASON_NOTDIRECTORY': 14}      # (Client sent RELAY_BEGIN_DIR to a non-directory relay.)
+    # noqa  using OrderedDict to help reproducible-builds
+    stream_close_reasons = collections.OrderedDict([
+        ('REASON_MISC', 1),               # (catch-all for unlisted reasons)
+        ('REASON_RESOLVEFAILED', 2),      # (couldn't look up hostname)
+        ('REASON_CONNECTREFUSED', 3),     # (remote host refused connection) [*]
+        ('REASON_EXITPOLICY', 4),         # (OR refuses to connect to host or port)
+        ('REASON_DESTROY', 5),            # (Circuit is being destroyed)
+        ('REASON_DONE', 6),               # (Anonymized TCP connection was closed)
+        ('REASON_TIMEOUT', 7),            # (Connection timed out, or OR timed out while connecting)
+        ('REASON_NOROUTE', 8),            # (Routing error while attempting to contact destination)
+        ('REASON_HIBERNATING', 9),        # (OR is temporarily hibernating)
+        ('REASON_INTERNAL', 10),          # (Internal error at the OR)
+        ('REASON_RESOURCELIMIT', 11),     # (OR has no resources to fulfill request)
+        ('REASON_CONNRESET', 12),         # (Connection was unexpectedly reset)
+        ('REASON_TORPROTOCOL', 13),       # (Sent when closing connection because of Tor protocol violations.)
+        ('REASON_NOTDIRECTORY', 14),      # (Client sent RELAY_BEGIN_DIR to a non-directory relay.)
+    ])
 
     def close_stream(self, stream, reason='REASON_MISC', **kwargs):
         """
@@ -805,12 +815,6 @@ class TorState(object):
         txtorlog.msg(" --> addr_map", addr)
         self.addrmap.update(addr)
 
-    event_map = {'STREAM': _stream_update,
-                 'CIRC': _circuit_update,
-                 'NS': _update_network_status,
-                 'NEWCONSENSUS': _update_network_status,
-                 'ADDRMAP': _addr_map}
-    """event_map used by add_events to map event_name -> unbound method"""
     @defer.inlineCallbacks
     def _add_events(self):
         """
@@ -822,7 +826,7 @@ class TorState(object):
             # to self so they call the right thing
             yield self.protocol.add_event_listener(
                 event,
-                types.MethodType(func, self, TorState)
+                func,
             )
 
     # ICircuitContainer
