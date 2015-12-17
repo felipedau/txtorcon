@@ -40,7 +40,7 @@ from . import interface
 from txtorcon.interface import (
     ITorControlProtocol,
     IStreamListener, IStreamAttacher, StreamListenerMixin,
-    ICircuitContainer, ICircuitListener,
+    ICircuitContainer, ICircuitListener, CircuitListenerMixin,
     IRouterContainer, IAddrListener,
 )
 
