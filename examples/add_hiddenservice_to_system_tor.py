@@ -3,11 +3,7 @@
 # This connects to the system Tor (by default on control port 9151)
 # and adds a new hidden service configuration to it.
 
-import os
-import functools
-import shutil
-
-from twisted.internet import reactor, defer
+from twisted.internet import defer
 from twisted.internet.endpoints import TCP4ClientEndpoint, TCP4ServerEndpoint
 from twisted.web import server, resource
 from twisted.internet.task import react
